@@ -1,0 +1,130 @@
+IAMユーザにタグをつけておいたら、CostExplorerでユーザごとの利用料金が分かる？
+特に BedrockのAPI利用を区別したい。
+
+
+# IAM group ai-wg-20250930
+  - Bedrock full access 
+
+# C:\Users\arwml\.aws\credentials  の設定
+[bedrock]
+aws_access_key_id = ***************
+aws_secret_access_key = ***************
+
+
+# */.env の設定
+# AWS認証情報
+AWS_ACCESS_KEY_ID=****************
+AWS_SECRET_ACCESS_KEY=***************
+
+# 以下、モデル設定です。 
+# つながりにくい時は、AWS_DEFAULT_REGION やバージョンを切り替えてください。 優先順に並べています。
+# アカウント・モデルごとに接続制限があるため、Clineは東京、ツールの方は北米という感じで分散した方が良い。 
+# WG全体で１つのアカウントです。 1分毎の制限、1日の制限がありますので、数分待っても使えない場合は、混みあっているか
+# 他の人が1日の上限まで使っている可能性があります。そのような場合は別リージョン、別モデルへ切り替えてください。 
+
+# ①東京、グローバル sonnet 4
+#AWS_DEFAULT_REGION=ap-northeast-1
+#MODEL=global.anthropic.claude-sonnet-4-20250514-v1:0
+
+# ②北米、グローバル sonnet 4
+AWS_DEFAULT_REGION=us-east-1
+MODEL=global.anthropic.claude-sonnet-4-20250514-v1:0
+
+# ③東京、 sonnet 4
+#AWS_DEFAULT_REGION=ap-northeast-1
+#MODEL=apac.anthropic.claude-sonnet-4-20250514-v1:0
+
+# ④北米、 sonnet 4
+#AWS_DEFAULT_REGION=us-east-1
+#MODEL=us.anthropic.claude-sonnet-4-20250514-v1:0
+
+# ⑤東京、 sonnet 3.7
+#AWS_DEFAULT_REGION=ap-northeast-1
+#MODEL=apac.anthropic.claude-3-7-sonnet-20250219-v1:0
+
+# ⑥北米、 sonnet 3.7
+#AWS_DEFAULT_REGION=us-east-1
+#MODEL=us.anthropic.claude-3-7-sonnet-20250219-v1:0
+
+# ⑦東京、 sonnet 3.5
+#AWS_DEFAULT_REGION=ap-northeast-1
+#MODEL=apac.anthropic.claude-3-5-sonnet-20241022-v2:0
+
+# ⑧北米、 sonnet 3.5
+#AWS_DEFAULT_REGION=us-east-1
+#MODEL=us.anthropic.claude-3-5-sonnet-20241022-v2:0
+
+
+# config
+access-keys-rotated
+
+# Bedrock
+  - モデルアクセスの申請。
+  - クロスリージョン推論から 推論プロファイル ID を取得する。
+  
+# Service Quotas 
+クォータの引き上げを申請
+
+クォータの名称
+Global cross-region model inference tokens per minute for Anthropic Claude Sonnet 4 V1
+Global cross-region model inference tokens per day for Anthropic Claude Sonnet 4 V1
+Cross-region model inference tokens per minute for Anthropic Claude 3.7 Sonnet V1
+Cross-Region model inference tokens per minute for Anthropic Claude 3.5 Sonnet V2
+
+推論プロファイルID / 推論プロファイルARN
+global.anthropic.claude-sonnet-4-20250514-v1:0
+arn:aws:bedrock:us-east-1:364727579733:inference-profile/global.anthropic.claude-sonnet-4-20250514-v1:0
+
+us.anthropic.claude-sonnet-4-20250514-v1:0          
+arn:aws:bedrock:us-east-1:364727579733:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0
+
+us.anthropic.claude-3-7-sonnet-20250219-v1:0
+arn:aws:bedrock:us-east-1:364727579733:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0
+
+us.anthropic.claude-3-5-sonnet-20241022-v2:0
+arn:aws:bedrock:us-east-1:364727579733:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0
+
+global.anthropic.claude-sonnet-4-20250514-v1:0
+arn:aws:bedrock:ap-northeast-1:364727579733:inference-profile/global.anthropic.claude-sonnet-4-20250514-v1:0
+
+apac.anthropic.claude-sonnet-4-20250514-v1:0
+arn:aws:bedrock:ap-northeast-1:364727579733:inference-profile/apac.anthropic.claude-sonnet-4-20250514-v1:0
+
+apac.anthropic.claude-3-7-sonnet-20250219-v1:0
+arn:aws:bedrock:ap-northeast-1:364727579733:inference-profile/apac.anthropic.claude-3-7-sonnet-20250219-v1:0
+
+apac.anthropic.claude-3-5-sonnet-20241022-v2:0
+arn:aws:bedrock:ap-northeast-1:364727579733:inference-profile/apac.anthropic.claude-3-5-sonnet-20241022-v2:0
+
+
+
+SELECT 
+ userIdentity.userName AS user
+,json_extract_scalar(requestParameters, '$.modelId') as model
+,substr(eventTime, 1, 10) AS eventDate
+,eventTime
+,eventsource
+,eventname
+,errorcode
+,errormessage
+FROM "default"."cloudtrail_logs_aws_cloudtrail_logs_364727579733_6099b31e" 
+WHERE eventSource = 'bedrock.amazonaws.com'
+AND json_extract_scalar(requestParameters, '$.modelId') IS NOT NULL
+and errorcode is  null 
+and eventname <> 'GetFoundationModelAvailability'
+ORDER BY eventTime desc
+
+
+SELECT 
+  substr(eventTime, 1, 10) AS eventDate,
+  userIdentity.userName AS user,
+  json_extract_scalar(requestParameters, '$.modelId') AS model,
+  COUNT(*) AS call_count
+FROM "default"."cloudtrail_logs_aws_cloudtrail_logs_364727579733_6099b31e"
+WHERE eventSource = 'bedrock.amazonaws.com'
+  AND json_extract_scalar(requestParameters, '$.modelId') IS NOT NULL
+  AND errorCode IS NULL
+  and eventname <> 'GetFoundationModelAvailability'
+GROUP BY substr(eventTime, 1, 10), userIdentity.userName, json_extract_scalar(requestParameters, '$.modelId')
+ORDER BY eventDate desc, user, model;
+

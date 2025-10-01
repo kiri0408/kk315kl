@@ -1,0 +1,3 @@
+aws-serverless-10days-simple-weather-news-admin-20250927.s3-website-us-east-1
+amazonaws
+com
